@@ -1,3 +1,4 @@
+workspace = { members = ["double_buffer", "grid"] }
 [package]
 name = "ldgi_experiments"
 version = "0.1.0"
@@ -9,4 +10,5 @@ edition = "2021"
 image = "0.25"
 show-image = { version = "0.14", features = ["image"] }
 glam = "0.27"
-smallvec = "1.13"
+grid = { path = "grid" }
+double_buffer = { path = "double_buffer" }

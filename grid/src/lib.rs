@@ -70,8 +70,8 @@ impl<T> Grid<T> {
     {
         let mut data = Vec::with_capacity(width as usize * height as usize);
 
-        for x in 0..width {
-            for y in 0..height {
+        for y in 0..height {
+            for x in 0..width {
                 data.push(func(x, y));
             }
         }

@@ -1,16 +1,10 @@
 use glam::{IVec2, UVec2, Vec3};
 use show_image::{create_window, ImageInfo, ImageView};
 
-use crate::{double_buffer::DoubleBuffer, grid::Grid};
-
-mod double_buffer;
-mod grid;
+use double_buffer::DoubleBuffer;
+use grid::Grid;
 
 fn distance(lhs: UVec2, rhs: UVec2) -> f32 {
-    if lhs == rhs {
-        return 10.0;
-    } // TEMP value until further considered
-
     let lhs = lhs.as_vec2();
     let rhs = rhs.as_vec2();
     lhs.distance(rhs) * CELLS_TO_DISTANCE
@@ -36,7 +30,7 @@ fn received_energy(reader: &Grid<Cell>, source: UVec2, sink: UVec2) -> f32 {
     let throughput = (dir.x.abs() / total) * same_target(x_sample)
         + (dir.y.abs() / total) * same_target(y_sample);
 
-    throughput * reader[source].energy / distance(source, sink)
+    throughput * reader[source].energy / (distance(source, sink) + 1.0)
 }
 
 #[derive(Clone, Copy)]
@@ -103,7 +97,7 @@ fn default_double_buffer() -> DoubleBuffer<[Grid<Cell>; 3]> {
 const WIDTH: u32 = 128;
 const HEIGHT: u32 = 128;
 const DEFAULT_ENERGY: f32 = 0.0;
-const BLUR_FACTOR: f32 = 0.0;
+const BLUR_FACTOR: f32 = 0.2;
 const ACC_FACTOR: f32 = 0.7;
 const CELLS_TO_DISTANCE: f32 = 32.0 / (HEIGHT as f32);
 
@@ -113,12 +107,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = create_window("image", Default::default())?;
 
     let lights = [
-        (UVec2::new(50, 45), Vec3::new(1.0, 0.0, 0.0)),
-        // (UVec2::new(80, 70), Vec3::new(0.0, 0.0, 1.0)),
-        // (UVec2::new(60, 90), Vec3::new(0.0, 1.0, 0.0)),
-        // (UVec2::new(10, 50), Vec3::new(0.5, 1.0, 0.0)),
-        // (UVec2::new(50, 10), Vec3::new(1.0, 0.0, 1.0)),
-        // (UVec2::new(60, 60), Vec3::new(0.2, 0.2, 0.2)),
+        (UVec2::new(60, 45), Vec3::new(1.0, 0.0, 0.0)),
+        (UVec2::new(80, 70), Vec3::new(0.0, 0.0, 1.0)),
+        (UVec2::new(60, 90), Vec3::new(0.0, 1.0, 0.0)),
+        (UVec2::new(10, 50), Vec3::new(0.5, 1.0, 0.0)),
+        (UVec2::new(50, 10), Vec3::new(1.0, 0.0, 1.0)),
+        (UVec2::new(60, 60), Vec3::new(0.2, 0.2, 0.2)),
     ];
     let mut barriers = vec![];
 
@@ -184,6 +178,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ImageView::new(ImageInfo::rgb8(WIDTH, HEIGHT), &image_data),
         )?;
 
-        std::thread::sleep(std::time::Duration::from_secs_f32(2.125)); // dEBUG:
+        std::thread::sleep(std::time::Duration::from_secs_f32(0.05)); // dEBUG:
     }
 }
