@@ -1,15 +1,10 @@
-use glam::{UVec2, Vec3};
+use glam::{IVec2, UVec2, Vec3};
 use show_image::{create_window, ImageInfo, ImageView};
 
 use crate::{double_buffer::DoubleBuffer, grid::Grid};
 
 mod double_buffer;
 mod grid;
-
-fn luminance(rgb: Vec3) -> f32 {
-    let [r, g, b] = rgb.to_array();
-    0.2126 * r + 0.7152 * g + 0.0722 * b
-}
 
 fn distance(lhs: UVec2, rhs: UVec2) -> f32 {
     if lhs == rhs {
@@ -21,97 +16,166 @@ fn distance(lhs: UVec2, rhs: UVec2) -> f32 {
     lhs.distance(rhs) * CELLS_TO_DISTANCE
 }
 
+fn received_energy(reader: &Grid<Cell>, source: UVec2, sink: UVec2) -> f32 {
+    if source == sink {
+        return reader[source].energy;
+    }
+
+    let dir = (source.as_ivec2() - sink.as_ivec2()).as_vec2().normalize();
+    let sign = (source.as_ivec2() - sink.as_ivec2()).signum();
+    let x_offset = IVec2::new(sign.x, 0);
+    let y_offset = IVec2::new(0, sign.y);
+
+    let total = dir.x.abs() + dir.y.abs();
+
+    let same_target = |p| (source == reader[p].target) as u32 as f32;
+
+    let x_sample = (sink.as_ivec2() + x_offset).as_uvec2();
+    let y_sample = (sink.as_ivec2() + y_offset).as_uvec2();
+
+    let throughput = (dir.x.abs() / total) * same_target(x_sample)
+        + (dir.y.abs() / total) * same_target(y_sample);
+
+    throughput * reader[source].energy / distance(source, sink)
+}
+
 #[derive(Clone, Copy)]
 struct Cell {
-    color: Vec3,
+    energy: f32,
     target: UVec2,
 }
 
 fn update_cell(pos: UVec2, reader: &Grid<Cell>) -> Cell {
     let mut target = reader[pos].target;
-    let mut color = reader[pos].color;
-    let mut nb_sum = Vec3::ZERO; // neighbour average
+    let mut energy = reader[pos].energy;
+    let mut nb_sum = 0.0; // neighbour average
     let mut nb_count = 0.0;
 
-    let better_target = |target, nb_target| {
-        if luminance(reader[nb_target].color) / distance(pos, nb_target)
-            > luminance(reader[target].color) / distance(pos, target)
-        {
-            nb_target
+    let better_target = |lhs: UVec2, rhs: UVec2| {
+        if received_energy(reader, lhs, pos) >= received_energy(reader, rhs, pos) {
+            lhs
         } else {
-            target
+            rhs
         }
     };
+    target = better_target(target, pos);
 
     if pos.x > 0 {
-        let nb_cell = reader[pos - UVec2::new(1, 0)];
+        let nb_cell = reader[pos - UVec2::X];
         target = better_target(target, nb_cell.target);
-        nb_sum += nb_cell.color;
+        nb_sum += nb_cell.energy;
         nb_count += 1.0;
     }
     if pos.y > 0 {
-        let nb_cell = reader[pos - UVec2::new(0, 1)];
+        let nb_cell = reader[pos - UVec2::Y];
         target = better_target(target, nb_cell.target);
-        nb_sum += nb_cell.color;
+        nb_sum += nb_cell.energy;
         nb_count += 1.0;
     }
     if pos.x < WIDTH - 1 {
-        let nb_cell = reader[pos + UVec2::new(1, 0)];
+        let nb_cell = reader[pos + UVec2::X];
         target = better_target(target, nb_cell.target);
-        nb_sum += nb_cell.color;
+        nb_sum += nb_cell.energy;
         nb_count += 1.0;
     }
     if pos.y < HEIGHT - 1 {
-        let nb_cell = reader[pos + UVec2::new(0, 1)];
+        let nb_cell = reader[pos + UVec2::Y];
         target = better_target(target, nb_cell.target);
-        nb_sum += nb_cell.color;
+        nb_sum += nb_cell.energy;
         nb_count += 1.0;
     }
-    target = better_target(target, pos);
 
     let nb_avg = nb_sum / nb_count;
-    color = color * (1.0 - ACC_FACTOR) + reader[target].color / distance(pos, target) * ACC_FACTOR;
-    color = color * (1.0 - BLUR_FACTOR) + nb_avg * BLUR_FACTOR;
+    energy = energy * (1.0 - ACC_FACTOR) + received_energy(reader, target, pos) * ACC_FACTOR;
+    energy = energy * (1.0 - BLUR_FACTOR) + nb_avg * BLUR_FACTOR;
 
-    Cell { color, target }
+    Cell { energy, target }
+}
+
+fn default_double_buffer() -> DoubleBuffer<[Grid<Cell>; 3]> {
+    let default_grid = Grid::from_fn(WIDTH, HEIGHT, |x, y| Cell {
+        energy: DEFAULT_ENERGY,
+        target: UVec2::new(x, y),
+    });
+    DoubleBuffer::from_value([default_grid.clone(), default_grid.clone(), default_grid])
 }
 
 const WIDTH: u32 = 128;
 const HEIGHT: u32 = 128;
-const DEFAULT_COLOR: Vec3 = Vec3::ZERO;
-const BLUR_FACTOR: f32 = 0.9;
+const DEFAULT_ENERGY: f32 = 0.0;
+const BLUR_FACTOR: f32 = 0.0;
 const ACC_FACTOR: f32 = 0.7;
 const CELLS_TO_DISTANCE: f32 = 32.0 / (HEIGHT as f32);
 
 #[show_image::main]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut double_buf = DoubleBuffer::from_value(Grid::from_fn(WIDTH, HEIGHT, |x, y| Cell {
-        color: DEFAULT_COLOR,
-        target: UVec2::new(x, y),
-    }));
+    let mut double_buf = default_double_buffer();
     let window = create_window("image", Default::default())?;
 
     let lights = [
-        (UVec2::new(40, 40), Vec3::new(1.0, 0.0, 0.0)),
-        (UVec2::new(80, 70), Vec3::new(0.0, 0.0, 1.0)),
+        (UVec2::new(50, 45), Vec3::new(1.0, 0.0, 0.0)),
+        // (UVec2::new(80, 70), Vec3::new(0.0, 0.0, 1.0)),
+        // (UVec2::new(60, 90), Vec3::new(0.0, 1.0, 0.0)),
+        // (UVec2::new(10, 50), Vec3::new(0.5, 1.0, 0.0)),
+        // (UVec2::new(50, 10), Vec3::new(1.0, 0.0, 1.0)),
+        // (UVec2::new(60, 60), Vec3::new(0.2, 0.2, 0.2)),
     ];
+    let mut barriers = vec![];
+
+    for x in 36..37 {
+        let y = 40;
+        barriers.push(UVec2::new(x, y));
+    }
 
     loop {
         let (reader, writer) = double_buf.split();
 
-        for pos in reader.iter_indices() {
-            writer[pos] = update_cell(pos, reader);
+        for i in 0..3 {
+            for pos in reader[i].iter_indices() {
+                writer[i][pos] = update_cell(pos, &reader[i]);
+            }
         }
 
         for (pos, color) in lights {
-            writer[pos].color = color;
+            // TODO: figure out a better way to do this, now color is also decreased when light is
+            // very dim
+            writer[0][pos].energy = color.x;
+            writer[1][pos].energy = color.y;
+            writer[2][pos].energy = color.z;
         }
+        for &pos in barriers.iter() {
+            writer[0][pos] = Cell {
+                energy: 0.0,
+                target: pos,
+            };
+            writer[1][pos] = Cell {
+                energy: 0.0,
+                target: pos,
+            };
+            writer[2][pos] = Cell {
+                energy: 0.0,
+                target: pos,
+            };
+        }
+
         double_buf.swap();
 
-        let image_data: Vec<u8> = double_buf
-            .reader()
-            .iter()
-            .flat_map(|v| v.color.to_array())
+        let image_data: Vec<u8> = double_buf.reader()[0]
+            .iter_indices()
+            .flat_map(|pos| {
+                let reader = double_buf.reader();
+                // // DEBUG:
+                // [
+                //     reader[0][pos].target.x as f32 / WIDTH as f32,
+                //     reader[0][pos].target.y as f32 / HEIGHT as f32,
+                //     0.0,
+                // ]
+                [
+                    reader[0][pos].energy,
+                    reader[1][pos].energy,
+                    reader[2][pos].energy,
+                ]
+            })
             .map(|x| (x.clamp(0.0, 1.0) * 256.0) as u8)
             .collect();
 
@@ -119,5 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "image-yep",
             ImageView::new(ImageInfo::rgb8(WIDTH, HEIGHT), &image_data),
         )?;
+
+        std::thread::sleep(std::time::Duration::from_secs_f32(2.125)); // dEBUG:
     }
 }

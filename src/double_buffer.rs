@@ -3,6 +3,7 @@ pub struct DoubleBuffer<T> {
     write: T,
 }
 
+#[allow(dead_code)]
 impl<T> DoubleBuffer<T> {
     pub fn new(read: T, write: T) -> Self {
         Self { read, write }

@@ -50,6 +50,7 @@ impl<T> IndexMut<UVec2> for Grid<T> {
     }
 }
 
+#[allow(dead_code)]
 impl<T> Grid<T> {
     /// initializes the grid by cloning a value
     pub fn from_value(width: u32, height: u32, value: T) -> Self

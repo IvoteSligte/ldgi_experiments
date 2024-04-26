@@ -9,3 +9,4 @@ edition = "2021"
 image = "0.25"
 show-image = { version = "0.14", features = ["image"] }
 glam = "0.27"
+smallvec = "1.13"
