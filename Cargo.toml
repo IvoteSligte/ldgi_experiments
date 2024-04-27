@@ -10,5 +10,6 @@ edition = "2021"
 image = "0.25"
 show-image = { version = "0.14", features = ["image"] }
 glam = "0.27"
-grid = { path = "grid" }
+grid = { path = "grid", features = ["rayon"] }
 double_buffer = { path = "double_buffer" }
+rayon = "1.10.0"

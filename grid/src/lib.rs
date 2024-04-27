@@ -2,6 +2,12 @@ use std::ops::{Index, IndexMut};
 
 use glam::UVec2;
 
+#[cfg(feature = "lerp")]
+pub mod lerp;
+
+#[cfg(feature = "rayon")]
+pub mod rayon;
+
 /// row-major grid of values backed by a single [Vec]
 ///
 /// uses [glam::Vec2] for indexing
@@ -20,7 +26,7 @@ impl<T: Clone> Clone for Grid<T> {
     }
 }
 
-fn assert_index_in_range(index: UVec2, dimensions: UVec2) {
+pub(crate) fn assert_index_in_range(index: UVec2, dimensions: UVec2) {
     assert!(
         index.x < dimensions.x && index.y < dimensions.y,
         "Index out of bounds. {} is not less than {}",
@@ -29,7 +35,7 @@ fn assert_index_in_range(index: UVec2, dimensions: UVec2) {
     );
 }
 
-fn flatten_index(index: UVec2, width: u32) -> usize {
+pub(crate) fn flatten_index(index: UVec2, width: u32) -> usize {
     (index.y * width + index.x) as usize
 }
 
@@ -50,7 +56,6 @@ impl<T> IndexMut<UVec2> for Grid<T> {
     }
 }
 
-#[allow(dead_code)]
 impl<T> Grid<T> {
     /// initializes the grid by cloning a value
     pub fn from_value(width: u32, height: u32, value: T) -> Self
